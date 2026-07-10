@@ -5,6 +5,8 @@ Takes a list of Meijer product page URLs and returns each item annotated with it
 
 See [ROADMAP.md](ROADMAP.md) for where this is heading (Android APK with on-device resolution).
 
+![demo image](https://github.com/sp00machine/Weijer/blob/main/demo.png?raw=true)
+
 ## Layout
 
 - `server/` — Bun + TypeScript API (Hono) + SQLite cache (`bun:sqlite`). Cache-first; forwards
