@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
                     
                     const groups = data.cart?.cartGroups ?? [];
                     const store = groups[0]?.pointOfService?.name ?? '245';
-                    const urls = groups.flatMap(cg => cg.entries).map(item => "https://www.meijer.com/shopping/prohduct/null/" + item.product.code + ".html");
+                    const urls = groups.flatMap(cg => cg.entries).map(item => "https://www.meijer.com/shopping/product/null/" + item.product.code + ".html");
     
 //                    console.log("maybe?", JSON.stringify(items));
                     window.Android.onCart(JSON.stringify({store, urls}));
