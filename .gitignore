@@ -1,0 +1,19 @@
+node_modules/
+bun.lockb
+
+# deployment secrets / machine-local config
+.env
+scraper/.env
+
+# scraper python env
+scraper/.venv/
+scraper/__pycache__/
+
+# sqlite cache (runtime state)
+server/aisle.db
+server/aisle.db-journal
+server/aisle.db-wal
+server/aisle.db-shm
+
+# os cruft
+.DS_Store

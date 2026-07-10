@@ -1,0 +1,29 @@
+# VPS deployment: Bun server + SQLite (volume) + built PWA, one container.
+#
+# Reached through the shared `nginx` reverse proxy on the external `web` network
+# (see /home/ash/apps/nginx/conf.d/meijer.conf) at meijer.ashtronics.xyz — not
+# published to the host, matching the other apps here. nginx resolves this
+# container by its service-name alias `meijer-aisle` on the web network.
+#
+# Env (put real values in a .env file next to this compose.yaml):
+#   SCRAPER_URL   scraper service base URL, e.g. http://<host>:8044. Use a raw IP
+#                 for a residential-machine scraper — MagicDNS names don't resolve
+#                 inside containers. Unset = scraping disabled (cache-only server).
+services:
+  meijer-aisle:
+    build: .
+    restart: unless-stopped
+    environment:
+      DB_PATH: /data/aisle.db
+      SCRAPER_URL: ${SCRAPER_URL:-}
+    volumes:
+      - aisle-data:/data
+    networks:
+      - web
+
+volumes:
+  aisle-data:
+
+networks:
+  web:
+    external: true

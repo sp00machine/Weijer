@@ -1,0 +1,15 @@
+# Runs on the residential machine (needs a residential IP — see repo CLAUDE.md).
+#
+# Set SCRAPER_BIND to this machine's tailnet IP (find it with `tailscale ip -4`)
+# so the port is reachable from the VPS over the tailnet but not from the LAN:
+#
+#   SCRAPER_BIND=100.x.y.z docker compose up -d --build
+#
+# Defaults to 127.0.0.1 (local testing only).
+services:
+  scraper:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${SCRAPER_BIND:-127.0.0.1}:8044:8044"
