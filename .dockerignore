@@ -1,0 +1,9 @@
+.git
+node_modules
+**/node_modules
+app/dist
+scraper/.venv
+scraper/__pycache__
+server/aisle.db*
+*.md
+.claude
