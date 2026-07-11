@@ -6,6 +6,7 @@ const LS_URLS = "meijer-aisle:urls";
 const LS_RESULTS = "meijer-aisle:results";
 const LS_QTY = "meijer-aisle:qty";
 const LS_PICKED = "meijer-aisle:picked";
+const LS_NAMES = "meijer-aisle:names";
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -42,6 +43,8 @@ export default function App() {
   );
   // product_id -> quantity in the cart (absent = 1).
   const [qtyById, setQtyById] = createSignal<Record<string, number>>(load(LS_QTY, {}));
+  // product_id -> name from the imported cart (fallback title when scraping fails).
+  const [nameById, setNameById] = createSignal<Record<string, string>>(load(LS_NAMES, {}));
   // Keys (see rowKey) of items already picked into the physical cart.
   const [picked, setPicked] = createSignal<string[]>(load<string[]>(LS_PICKED, []));
   const [loading, setLoading] = createSignal(false);
@@ -54,6 +57,13 @@ export default function App() {
     (results() ?? []).filter((r) => r.source === "none").length;
 
   const isPicked = (r: AisleResult) => picked().includes(rowKey(r));
+
+  // Prefer the scraped title; fall back to the cart name, then the raw URL.
+  const titleFor = (r: AisleResult) => r.title ?? nameById()[r.product_id ?? ""] ?? r.url;
+
+  // Drive the native shell's overlay (bouncing logo) around a resolve. No-ops in a browser.
+  const showNativeOverlay = () => (window as any).Android?.showOverlay?.();
+  const hideNativeOverlay = () => (window as any).Android?.hideOverlay?.();
 
   // Picked items sink to the bottom; server aisle-order is preserved within each group.
   const orderedRows = () => {
@@ -71,18 +81,27 @@ export default function App() {
   createEffect(() => localStorage.setItem(LS_URLS, JSON.stringify(urlsText())));
   createEffect(() => localStorage.setItem(LS_RESULTS, JSON.stringify(results())));
   createEffect(() => localStorage.setItem(LS_QTY, JSON.stringify(qtyById())));
+  createEffect(() => localStorage.setItem(LS_NAMES, JSON.stringify(nameById())));
   createEffect(() => localStorage.setItem(LS_PICKED, JSON.stringify(picked())));
 
-  async function runResolve(storeVal: string, urls: string[], qty: Record<string, number> = {}) {
+  async function runResolve(
+    storeVal: string,
+    urls: string[],
+    qty: Record<string, number> = {},
+    names: Record<string, string> = {},
+  ) {
     setError(null);
     if (urls.length === 0) {
       setError("Add at least one product URL.");
+      hideNativeOverlay();
       return;
     }
     setLoading(true);
+    showNativeOverlay();
     try {
       const res = await resolve(storeVal.trim(), urls);
       setQtyById(qty);
+      setNameById(names);
       setResults(res.results);
       setScraperStatus(res.scraper);
       setPicked([]); // a fresh list is a fresh shopping trip
@@ -90,6 +109,7 @@ export default function App() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      hideNativeOverlay();
     }
   }
 
@@ -103,28 +123,38 @@ export default function App() {
   }
 
   // The Android shell delivers an imported Meijer cart through this hook. Payload is
-  //   {"store":"245","items":[{"url":"...","qty":2}]}
-  // (legacy {"store","urls":[...]} is still accepted; quantities default to 1).
+  //   {"store":"245","items":[{"url":"...","quantity":2,"name":"..."}]}
+  // (legacy `qty` key and {"store","urls":[...]} are still accepted).
   onMount(() => {
     (window as any).__deliverCart = (payloadJson: string) => {
       try {
         const parsed = JSON.parse(payloadJson) as {
           store: string;
-          items?: { url: string; qty?: number }[];
+          items?: { url: string; quantity?: number; qty?: number; name?: string }[];
           urls?: string[];
         };
-        const items = parsed.items ?? (parsed.urls ?? []).map((url) => ({ url, qty: 1 }));
+        const items: { url: string; quantity?: number; qty?: number; name?: string }[] =
+          parsed.items ?? (parsed.urls ?? []).map((url) => ({ url }));
+        if (items.length === 0) {
+          setError("Your Meijer cart looks empty — add items and import again.");
+          hideNativeOverlay();
+          return;
+        }
         const urls = items.map((i) => i.url);
         const qty: Record<string, number> = {};
+        const names: Record<string, string> = {};
         for (const it of items) {
           const pid = productIdFromUrl(it.url);
-          if (pid) qty[pid] = it.qty ?? 1;
+          if (!pid) continue;
+          qty[pid] = it.quantity ?? it.qty ?? 1;
+          if (it.name) names[pid] = it.name;
         }
         setStore(parsed.store);
         setUrlsText(urls.join("\n"));
-        runResolve(parsed.store, urls, qty);
+        runResolve(parsed.store, urls, qty, names);
       } catch {
         setError("Couldn't read the imported cart.");
+        hideNativeOverlay();
       }
     };
     setInApp(typeof (window as any).Android?.startCartImport === "function");
@@ -228,7 +258,7 @@ export default function App() {
                   </div>
                   <div class="meta">
                     <span class="title">
-                      {r.title ?? r.url}
+                      {titleFor(r)}
                       <Show when={qty() > 1}>
                         <span class="qty">×{qty()}</span>
                       </Show>
