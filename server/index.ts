@@ -23,6 +23,11 @@ function aisleSortKey(r: AisleResult): [string, number, number] {
 
 function sortResults(results: AisleResult[]): AisleResult[] {
   return results.sort((a, b) => {
+    // Unresolved rows (no aisle) always sort to the bottom, regardless of how
+    // localeCompare would treat the aisle-key sentinel.
+    const aNull = a.aisle == null;
+    const bNull = b.aisle == null;
+    if (aNull !== bNull) return aNull ? 1 : -1;
     const ka = aisleSortKey(a);
     const kb = aisleSortKey(b);
     return ka[0].localeCompare(kb[0]) || ka[1] - kb[1] || ka[2] - kb[2];
