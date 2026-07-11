@@ -65,12 +65,21 @@ export default function App() {
   const showNativeOverlay = () => (window as any).Android?.showOverlay?.();
   const hideNativeOverlay = () => (window as any).Android?.hideOverlay?.();
 
-  // Picked items sink to the bottom; server aisle-order is preserved within each group.
-  const orderedRows = () => {
-    const rows = results() ?? [];
-    return [...rows.filter((r) => !isPicked(r)), ...rows.filter(isPicked)];
+  // Unpicked rows grouped by aisle (results() is already aisle-sorted, so we can group
+  // consecutively); picked items collect separately at the bottom.
+  type AisleGroup = { aisle: string | null; rows: AisleResult[] };
+  const unpickedGroups = (): AisleGroup[] => {
+    const groups: AisleGroup[] = [];
+    for (const r of results() ?? []) {
+      if (isPicked(r)) continue;
+      const last = groups[groups.length - 1];
+      if (last && last.aisle === r.aisle) last.rows.push(r);
+      else groups.push({ aisle: r.aisle, rows: [r] });
+    }
+    return groups;
   };
-  const pickedCount = () => (results() ?? []).filter(isPicked).length;
+  const pickedItems = () => (results() ?? []).filter(isPicked);
+  const pickedCount = () => pickedItems().length;
 
   function togglePicked(key: string) {
     setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -160,6 +169,44 @@ export default function App() {
     setInApp(typeof (window as any).Android?.startCartImport === "function");
   });
 
+  const Row = (props: { r: AisleResult }) => {
+    const r = props.r;
+    const key = rowKey(r);
+    const qty = () => qtyById()[r.product_id ?? ""] ?? 1;
+    return (
+      <li
+        classList={{ row: true, unresolved: r.aisle === null, picked: isPicked(r) }}
+        onClick={() => togglePicked(key)}
+      >
+        <input
+          type="checkbox"
+          class="check"
+          checked={isPicked(r)}
+          onClick={(e) => e.stopPropagation()}
+          onChange={() => togglePicked(key)}
+        />
+        <div class="loc">
+          <Show when={r.section}>
+            <span class="section">Sec {r.section}</span>
+          </Show>
+        </div>
+        <div class="meta">
+          <span class="title">
+            {titleFor(r)}
+            <Show when={qty() > 1}>
+              <span class="qty">×{qty()}</span>
+            </Show>
+          </span>
+          <Show when={r.fetched_at}>
+            <span class="age">
+              {r.source === "cache" ? "cached" : "fresh"} · {ageLabel(r.fetched_at)}
+            </span>
+          </Show>
+        </div>
+      </li>
+    );
+  };
+
   return (
     <div class="app">
           <header>
@@ -232,47 +279,20 @@ export default function App() {
           {pickedCount()} of {results()!.length} picked
         </p>
         <ul class="results">
-          <For each={orderedRows()}>
-            {(r) => {
-              const key = rowKey(r);
-              const qty = () => qtyById()[r.product_id ?? ""] ?? 1;
-              return (
-                <li
-                  classList={{ row: true, unresolved: r.aisle === null, picked: isPicked(r) }}
-                  onClick={() => togglePicked(key)}
-                >
-                  <input
-                    type="checkbox"
-                    class="check"
-                    checked={isPicked(r)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => togglePicked(key)}
-                  />
-                  <div class="loc">
-                    <Show when={r.aisle} fallback={<span class="unknown">location unknown</span>}>
-                      <span class="aisle">Aisle {r.aisle}</span>
-                      <Show when={r.section}>
-                        <span class="section">Sec {r.section}</span>
-                      </Show>
-                    </Show>
-                  </div>
-                  <div class="meta">
-                    <span class="title">
-                      {titleFor(r)}
-                      <Show when={qty() > 1}>
-                        <span class="qty">×{qty()}</span>
-                      </Show>
-                    </span>
-                    <Show when={r.fetched_at}>
-                      <span class="age">
-                        {r.source === "cache" ? "cached" : "fresh"} · {ageLabel(r.fetched_at)}
-                      </span>
-                    </Show>
-                  </div>
+          <For each={unpickedGroups()}>
+            {(group) => (
+              <>
+                <li class="aisle-header">
+                  {group.aisle ? `Aisle ${group.aisle}` : "Location unknown"}
                 </li>
-              );
-            }}
+                <For each={group.rows}>{(r) => <Row r={r} />}</For>
+              </>
+            )}
           </For>
+          <Show when={pickedItems().length > 0}>
+            <li class="aisle-header picked-header">Picked ({pickedItems().length})</li>
+            <For each={pickedItems()}>{(r) => <Row r={r} />}</For>
+          </Show>
         </ul>
         <button type="button" class="reset" onClick={() => setPicked([])}>
           Reset picked

@@ -162,6 +162,24 @@ button[type="submit"]:disabled {
   color: var(--muted);
 }
 
+.aisle-header {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand);
+}
+
+.results > .aisle-header:first-child {
+  margin-top: 0.2rem;
+}
+
+.picked-header {
+  color: var(--muted);
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -220,7 +238,7 @@ button[type="submit"]:disabled {
 
 .row .loc {
   flex: 0 0 auto;
-  min-width: 5.5rem;
+  min-width: 3.2rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -235,8 +253,10 @@ button[type="submit"]:disabled {
 }
 
 .section {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--brand);
+  white-space: nowrap;
 }
 
 .row.unresolved {
