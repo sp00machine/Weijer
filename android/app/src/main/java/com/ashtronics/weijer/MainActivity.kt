@@ -15,6 +15,11 @@ import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import org.json.JSONObject
+import android.graphics.Color
+import android.view.Choreographer
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageView
 
 class MainActivity : AppCompatActivity() {
 
@@ -22,6 +27,15 @@ class MainActivity : AppCompatActivity() {
     private val meijerURL = "https://www.meijer.com/shopping/accounts.html"
 
     private lateinit var webView: WebView
+
+//    Weijer DVD logo bouncer
+    private lateinit var overlay: FrameLayout
+    private lateinit var bouncer: ImageView
+    private var vx = 6f      // pixels per frame
+    private var vy = 4f
+    private var bouncing = false
+
+
 
     //a meijer cart waiting to be sent over to the pwa
     //volatile bc claude says the ui thread and the js thread could create race conditions
@@ -33,18 +47,31 @@ class MainActivity : AppCompatActivity() {
         fun onCart(json: String) {
             Log.d("yeah and it worked", json)
             pendingCart = json
-            runOnUiThread { webView.loadUrl(pwaURL) }
+            runOnUiThread { setOverlayVisible(true); webView.loadUrl(pwaURL) }
         }
 
         @JavascriptInterface
         fun onError(error: String) {
             Log.d("yeah but theres an error", error)
+//            runOnUiThread { setOverlayVisible(false) }
         }
 
         //loads meijer into the webview (wait hold on a sec claude why can't we just directly navigate there from the pwa?)
         @JavascriptInterface
         fun startCartImport() {
-            runOnUiThread { webView.loadUrl(meijerURL) }
+            runOnUiThread { setOverlayVisible(true); webView.loadUrl(meijerURL) }
+        }
+
+        //manually show overlay
+        @JavascriptInterface
+        fun showOverlay() {
+            runOnUiThread { setOverlayVisible(true) }
+        }
+
+        //manually hide overlay
+        @JavascriptInterface
+        fun hideOverlay() {
+            runOnUiThread { setOverlayVisible(false) }
         }
     }
 
@@ -70,8 +97,7 @@ class MainActivity : AppCompatActivity() {
 //                    console.log("maybe?", JSON.stringify(items));
                     window.Android.onCart(JSON.stringify({store, items}));
                 } catch(e) {
-//                    alert("ya fucked up\n\n" + e);
-                    window.Android.onError("ya fucked up\n\n" + e);
+                    console.log("ya fucked up\n\n" + e);
                 }
             })();
         """.trimIndent()
@@ -80,6 +106,52 @@ class MainActivity : AppCompatActivity() {
             const imgs = document.querySelectorAll('img[alt="Meijer logo"]');
             imgs.forEach((img) => img.src="https://meijer.ashtronics.xyz/weijer.svg")
         """.trimIndent()
+    }
+
+
+    private val frame = object : Choreographer.FrameCallback {
+        override fun doFrame(t: Long) {
+            if (!bouncing) return
+            val maxX = (overlay.width - bouncer.width).toFloat()
+            val maxY = (overlay.height - bouncer.height).toFloat()
+            if (maxX > 0f && maxY > 0f) {
+                var x = bouncer.translationX + vx
+                var y = bouncer.translationY + vy
+                if (x <= 0f || x >= maxX) { vx = -vx; x = x.coerceIn(0f, maxX); recolor() }
+                if (y <= 0f || y >= maxY) { vy = -vy; y = y.coerceIn(0f, maxY); recolor() }
+                bouncer.translationX = x
+                bouncer.translationY = y
+            }
+            Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+
+    //more overlay/dvd bouncer stuff
+    private fun recolor() {
+        bouncer.setColorFilter(Color.HSVToColor(floatArrayOf((0..360).random().toFloat(), 0.7f, 1f)))
+    }
+
+    private fun startBounce() {
+        if (bouncing) return
+        bouncing = true
+        Choreographer.getInstance().postFrameCallback(frame)
+    }
+
+    private fun stopBounce() {
+        bouncing = false
+        Choreographer.getInstance().removeFrameCallback(frame)
+    }
+
+
+    private fun setOverlayVisible(visible: Boolean) {
+        if (visible) {
+            overlay.visibility = View.VISIBLE
+            startBounce()
+        } else {
+            overlay.visibility = View.GONE
+            stopBounce()
+        }
     }
 
 
@@ -99,6 +171,9 @@ class MainActivity : AppCompatActivity() {
 
         //grabby
         webView = findViewById<WebView>(R.id.webview)
+        overlay = findViewById<FrameLayout>(R.id.overlay)
+        bouncer = findViewById<ImageView>(R.id.bouncer)
+
 
         //config
         webView.settings.javaScriptEnabled = true
@@ -141,11 +216,15 @@ class MainActivity : AppCompatActivity() {
                                 null
                             )
                             pendingCart = null
-                        }
+                        } else setOverlayVisible(false) //show the actual page if there's nothing to add to the cart. otherwise, the pwa will handle that
                     }
                     url.contains("meijer.com") -> {
                         view.evaluateJavascript(CART_JS, null)
                         view.evaluateJavascript(LOGO_JS, null)
+
+                        if(url.contains("oauth2")) { //meijer signin page
+                            setOverlayVisible(false)
+                        }
                     }
                 }
                 cookieManager.flush()
